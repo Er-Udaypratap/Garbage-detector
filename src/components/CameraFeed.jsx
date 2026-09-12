@@ -12,19 +12,35 @@ export default function CameraFeed({ userId, sensitivity, onNewDetection }) {
   const lastDetectionAtRef = useRef(0)
   const [cameraError, setCameraError] = useState('')
   const [status, setStatus] = useState('starting') // starting | live | error
+  const [facingMode, setFacingMode] = useState('environment') // 'environment' = back camera, 'user' = front
+  const [lastChangePercent, setLastChangePercent] = useState(0)
+  const [debugMsg, setDebugMsg] = useState('')
 
   useEffect(() => {
     let stream
 
     async function startCamera() {
+      setStatus('starting')
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        // Stop any previous stream before requesting a new facing mode
+        if (videoRef.current?.srcObject) {
+          videoRef.current.srcObject.getTracks().forEach((t) => t.stop())
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode },
+        })
         if (videoRef.current) {
           videoRef.current.srcObject = stream
         }
+        prevFrameRef.current = null // reset comparison baseline on camera switch
         setStatus('live')
       } catch (err) {
-        setCameraError('Camera permission denied or unavailable. Allow camera access and reload.')
+        setCameraError(
+          'Camera permission denied, unavailable, or this device has no ' +
+            (facingMode === 'environment' ? 'back' : 'front') +
+            ' camera. Try switching camera or check browser permissions.'
+        )
         setStatus('error')
       }
     }
@@ -34,7 +50,7 @@ export default function CameraFeed({ userId, sensitivity, onNewDetection }) {
     return () => {
       if (stream) stream.getTracks().forEach((track) => track.stop())
     }
-  }, [])
+  }, [facingMode])
 
   useEffect(() => {
     if (status !== 'live') return
@@ -60,6 +76,8 @@ export default function CameraFeed({ userId, sensitivity, onNewDetection }) {
 
     if (prevFrameRef.current) {
       const changePercent = frameDifferencePercent(prevFrameRef.current, currentFrame)
+      setLastChangePercent(changePercent)
+
       const inCooldown = Date.now() - lastDetectionAtRef.current < COOLDOWN_MS
 
       if (isDetection(changePercent, sensitivity) && !inCooldown) {
@@ -72,8 +90,12 @@ export default function CameraFeed({ userId, sensitivity, onNewDetection }) {
   }
 
   function captureAndUpload(canvas) {
+    setDebugMsg('Detected change — uploading...')
     canvas.toBlob(async (blob) => {
-      if (!blob) return
+      if (!blob) {
+        setDebugMsg('Failed to create image from frame.')
+        return
+      }
 
       const timestamp = new Date().toISOString()
       const filePath = `${userId}/${timestamp.replace(/[:.]/g, '-')}.jpg`
@@ -83,7 +105,7 @@ export default function CameraFeed({ userId, sensitivity, onNewDetection }) {
         .upload(filePath, blob, { contentType: 'image/jpeg' })
 
       if (uploadError) {
-        console.error('Upload failed:', uploadError.message)
+        setDebugMsg('Upload failed: ' + uploadError.message)
         return
       }
 
@@ -101,21 +123,39 @@ export default function CameraFeed({ userId, sensitivity, onNewDetection }) {
         .single()
 
       if (insertError) {
-        console.error('DB insert failed:', insertError.message)
+        setDebugMsg('Database save failed: ' + insertError.message)
         return
       }
 
+      setDebugMsg('Saved ✓')
       onNewDetection?.(row)
     }, 'image/jpeg', 0.85)
+  }
+
+  function toggleCamera() {
+    setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'))
   }
 
   return (
     <div className="camera-wrap">
       <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
+
       {status === 'starting' && <div className="camera-overlay">Requesting camera access...</div>}
       {status === 'error' && <div className="camera-overlay camera-overlay--error">{cameraError}</div>}
-      {status === 'live' && <div className="camera-badge">● Monitoring</div>}
+
+      {status === 'live' && (
+        <>
+          <div className="camera-badge">● Monitoring</div>
+          <button className="camera-switch-btn" onClick={toggleCamera} title="Switch camera">
+            ⟲ {facingMode === 'environment' ? 'Back' : 'Front'}
+          </button>
+          <div className="camera-debug">
+            Change: {lastChangePercent.toFixed(1)}% / threshold {sensitivity}%
+            {debugMsg && <div>{debugMsg}</div>}
+          </div>
+        </>
+      )}
     </div>
   )
 }
