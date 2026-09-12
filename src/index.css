@@ -110,6 +110,12 @@ button {
 
 .auth-switch a { color: var(--moss); font-weight: 600; text-decoration: none; }
 
+.auth-info {
+  color: var(--moss);
+  font-size: 13px;
+  margin-top: 12px;
+}
+
 /* ---------- Dashboard ---------- */
 .dashboard {
   min-height: 100vh;
@@ -163,6 +169,31 @@ button {
 }
 
 .camera-overlay--error { color: #f2c4b0; }
+
+.camera-switch-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--paper);
+  border: none;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.camera-debug {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  right: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #d9e8dc;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: monospace;
+}
 
 .camera-badge {
   position: absolute;
