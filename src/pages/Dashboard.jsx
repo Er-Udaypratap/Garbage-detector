@@ -14,12 +14,30 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function loadData() {
+      // Try to fetch existing profile
       const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
-      setProfile(profileData)
+        .maybeSingle()
+
+      if (profileData) {
+        setProfile(profileData)
+      } else {
+        // No profile row yet (common right after email-confirmation signup,
+        // since the earlier insert attempt had no active session to pass RLS).
+        // We have a session now, so this upsert will succeed.
+        const name = session.user.user_metadata?.full_name || ''
+        const email = session.user.email
+
+        const { data: created } = await supabase
+          .from('profiles')
+          .upsert({ id: userId, name, email })
+          .select()
+          .single()
+
+        setProfile(created)
+      }
 
       const { data: detectionData } = await supabase
         .from('detections')
