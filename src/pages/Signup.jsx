@@ -7,35 +7,39 @@ export default function Signup() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
   async function handleSignup(e) {
     e.preventDefault()
     setError('')
+    setInfo('')
     setLoading(true)
 
+    // Store name in auth metadata — this works even if email confirmation
+    // is required and no session exists yet (unlike a direct table insert,
+    // which needs an active session to pass the RLS check).
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
+      options: { data: { full_name: name } },
     })
+
+    setLoading(false)
 
     if (signUpError) {
       setError(signUpError.message)
-      setLoading(false)
       return
     }
 
-    // Save extra profile info (name) in the profiles table
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        name,
-        email,
-      })
+    // If email confirmation is ON, there's no session yet — user must
+    // confirm via email before logging in.
+    if (data.user && !data.session) {
+      setInfo('Account created. Check your email to confirm, then log in.')
+      return
     }
 
-    setLoading(false)
     navigate('/dashboard')
   }
 
@@ -61,6 +65,7 @@ export default function Signup() {
         />
 
         {error && <p className="auth-error">{error}</p>}
+        {info && <p className="auth-info">{info}</p>}
 
         <button type="submit" disabled={loading}>
           {loading ? 'Creating account...' : 'Sign up'}
